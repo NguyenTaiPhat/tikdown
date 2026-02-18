@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TIKTOK DOWNLOAD • No Watermark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo">TIKTOK DOWNLOAD</div>
+    <div class="subtitle" id="subtitle">Preview & Download TikTok without logo • Realtime stats</div>
+
+    <div class="lang-toggle" id="langToggle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 0 1 6.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
+      </svg>
+      <span class="lang-text" id="langText">VNI</span>
+    </div>
+  </header>
+
+  <div class="input-group">
+    <input type="text" id="tiktokUrl" placeholder="Paste TikTok video link..." autocomplete="off"/>
+    <button id="fetchBtn" class="fetch-btn">Preview & Download</button>
+  </div>
+
+  <div class="loading" id="loading"><span class="spinner"></span> <span id="loadingText">Fetching info...</span></div>
+  
+  <div class="error" id="error">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    <span id="errorMessage"></span>
+  </div>
+
+  <div class="result" id="result">
+    <div class="video-section">
+      <div class="media-container" id="mediaContainer">
+        <img id="thumbnail" class="media-thumbnail" alt="Thumbnail" src="" />
+        <div class="video-wrapper">
+          <video id="videoPlayer" class="media-video" controls preload="metadata" playsinline poster="">
+            <source id="videoSource" src="" type="video/mp4">
+            Your browser does not support video playback.
+          </video>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <h2 class="title" id="title"></h2>
+
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-number" id="views">—</div>
+          <div class="stat-change" id="viewsChange"></div>
+          <div class="stat-label" data-key="views">Views</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="likes">—</div>
+          <div class="stat-change" id="likesChange"></div>
+          <div class="stat-label" data-key="likes">Likes</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="comments">—</div>
+          <div class="stat-change" id="commentsChange"></div>
+          <div class="stat-label" data-key="comments">Comments</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="shares">—</div>
+          <div class="stat-change" id="sharesChange"></div>
+          <div class="stat-label" data-key="shares">Shares</div>
+        </div>
+      </div>
+
+      <div id="lastUpdate" class="last-update">
+        <span class="polling-indicator" id="pollingIndicator"></span>
+        <span id="lastUpdateText">Last updated: —</span>
+      </div>
+
+      <p><strong data-key="author">Author:</strong> <span id="author"></span></p>
+      <p><strong data-key="music">Music:</strong> <span id="music"></span></p>
+      <p><strong data-key="duration">Duration:</strong> <span id="duration"></span></p>
+      <p><strong data-key="date">Posted:</strong> <span id="date"></span></p>
+
+      <button class="download-btn" id="downloadBtn">Download without logo</button>
+      <button class="monitor-btn" id="monitorBtn">Track stats long-term (10s)</button>
+    </div>
+  </div>
+
+  <footer>Powered by <strong>tai phat</strong> • Realtime tracking • 2026</footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
