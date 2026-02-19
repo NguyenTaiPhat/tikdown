@@ -57,10 +57,7 @@ let videoData = null;
 let pollingInterval = null;
 let isMonitoring = false;
 let prevStats = { views: 0, likes: 0, comments: 0, shares: 0 };
-let turnstileToken = null;  // Token từ Cloudflare Turnstile
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 3000;
+let turnstileToken = null;
 
 const elements = {
   langToggle: document.getElementById('langToggle'),
@@ -117,23 +114,23 @@ elements.langToggle.addEventListener('click', () => {
 
 const t = () => translations[currentLang];
 
-// Cloudflare Turnstile callbacks
+// Cloudflare Turnstile
 function onTurnstileLoad() {
   if (typeof turnstile === 'undefined') {
-    console.warn('Turnstile script not loaded');
+    console.warn('Turnstile script chưa load');
     return;
   }
 
   turnstile.render('#turnstile-container', {
-    sitekey: '0x4AAAAAACfWngoNXQ6N1ta_',
-    theme: 'dark',  // 'light' | 'dark' | 'auto'
+    sitekey: '0x4AAAAAACfWngoNXQ6N1ta_',  // Site key của bạn
+    theme: 'dark',
     size: 'normal',
     callback: function(token) {
       turnstileToken = token;
       console.log('Turnstile token ready:', token);
     },
     'error-callback': function(code) {
-      console.error('Turnstile error:', code);
+      console.error('Turnstile error code:', code);
       showError(t().fetchFail);
       turnstile.reset();
     },
@@ -233,7 +230,7 @@ async function fetchAndUpdateStats() {
 
     updateStats(data);
   } catch {
-    // silent fail cho polling, không hiển thị lỗi mỗi 10s
+    // silent fail cho polling
   }
 }
 
@@ -244,7 +241,7 @@ function startMonitoring() {
   elements.monitorBtn.classList.add('stop', 'loading');
   elements.monitorBtn.disabled = true;
 
-  fetchAndUpdateStats(); // gọi ngay lần đầu
+  fetchAndUpdateStats();
   pollingInterval = setInterval(fetchAndUpdateStats, 10000);
 
   setTimeout(() => {
@@ -284,10 +281,17 @@ async function fetchVideoInfo() {
       turnstile: turnstileToken
     });
 
+    console.log('Gửi request:', `api/api.php?${params.toString()}`);
+
     const res = await fetch(`api/api.php?${params.toString()}`);
-    if (!res.ok) throw new Error('Network response was not ok');
+    if (!res.ok) {
+      console.error('API status:', res.status);
+      throw new Error('Network response was not ok');
+    }
 
     const data = await res.json();
+    console.log('API response:', data);
+
     if (data.code !== 0) {
       if (data.code === -2) {
         showError(t().botDetected);
@@ -339,7 +343,6 @@ async function fetchVideoInfo() {
     elements.result.style.display = 'block';
     setTimeout(() => elements.result.classList.add('show'), 100);
 
-    // Reset Turnstile sau khi dùng thành công
     if (typeof turnstile !== 'undefined') {
       turnstile.reset();
     }
