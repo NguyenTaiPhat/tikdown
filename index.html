@@ -8,6 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+
+  <!-- Cloudflare Turnstile -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" async defer></script>
 </head>
 <body>
 
@@ -26,6 +29,10 @@
 
   <div class="input-group">
     <input type="text" id="tiktokUrl" placeholder="Paste TikTok video link..." autocomplete="off"/>
+    
+    <!-- Turnstile widget (explicit rendering) -->
+    <div id="turnstile-container" style="margin: 12px auto; max-width: 300px;"></div>
+
     <button id="fetchBtn" class="fetch-btn">Preview & Download</button>
   </div>
 
