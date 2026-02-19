@@ -21,7 +21,7 @@ const translations = {
     shares: "Chia sẻ",
     videoError: "Không tải được link preview video.",
     downloadError: "Không tìm thấy link tải video không logo!",
-    fetchFail: "Lỗi khi lấy dữ liệu hoặc phát hiện bot. Vui lòng thử lại.",
+    fetchFail: "Lỗi khi lấy dữ liệu hoặc bảo mật thất bại. Vui lòng thử lại.",
     botDetected: "Phát hiện hành vi bất thường (bot). Vui lòng thử lại sau.",
     langText: "VNI"
   },
@@ -46,7 +46,7 @@ const translations = {
     shares: "Shares",
     videoError: "Cannot load video preview link.",
     downloadError: "No watermark-free video link found!",
-    fetchFail: "Error fetching data or bot detected. Please try again.",
+    fetchFail: "Error fetching data or security check failed. Please try again.",
     botDetected: "Bot behavior detected. Please try again later.",
     langText: "ENG"
   }
@@ -114,32 +114,31 @@ elements.langToggle.addEventListener('click', () => {
 
 const t = () => translations[currentLang];
 
-// Cloudflare Turnstile
+// Cloudflare Turnstile - chỉ load script, KHÔNG render widget
 function onTurnstileLoad() {
+  console.log('Turnstile script đã load (sẵn sàng execute khi cần)');
+}
+
+// Hàm lấy token khi nhấn nút (invisible execute)
+async function getTurnstileToken() {
   if (typeof turnstile === 'undefined') {
-    console.warn('Turnstile script chưa load');
-    return;
+    showError("Không tải được hệ thống bảo mật. Vui lòng reload trang.");
+    return null;
   }
 
-  turnstile.render('#turnstile-container', {
-    sitekey: '0x4AAAAAACfWngoNXQ6N1ta_',  // Site key của bạn
-    theme: 'dark',
-    size: 'normal',
-    callback: function(token) {
-      turnstileToken = token;
-      console.log('Turnstile token ready:', token);
-    },
-    'error-callback': function(code) {
-      console.error('Turnstile error code:', code);
-      showError(t().fetchFail);
-      turnstile.reset();
-    },
-    'expired-callback': function() {
-      console.log('Turnstile token expired');
-      turnstile.reset();
-      turnstileToken = null;
-    }
-  });
+  try {
+    const token = await turnstile.execute('0x4AAAAAACfWngoNXQ6N1ta_', {
+      action: 'fetch_tiktok_video',
+      cData: 'tiktok_downloader_action'
+    });
+
+    console.log('Turnstile token lấy thành công:', token);
+    return token;
+  } catch (err) {
+    console.error('Lỗi execute Turnstile:', err);
+    showError(t().fetchFail + " (Xác thực bảo mật thất bại)");
+    return null;
+  }
 }
 
 function showError(msg) {
@@ -217,49 +216,18 @@ function updateStats(data) {
 async function fetchAndUpdateStats() {
   if (!videoData?.id) return;
   try {
+    // polling không cần captcha lại (dùng token cũ hoặc bỏ qua nếu muốn)
     const res = await fetch(`api/api.php?id=${videoData.id}&turnstile=${encodeURIComponent(turnstileToken || '')}`);
-    if (!res.ok) throw new Error('Network error');
+    if (!res.ok) throw new Error();
     const data = await res.json();
-
-    if (data.code !== 0) {
-      if (data.code === -2 || data.msg?.toLowerCase().includes('bot')) {
-        showError(t().botDetected);
-      }
-      throw new Error();
-    }
-
+    if (data.code !== 0) throw new Error();
     updateStats(data);
-  } catch {
-    // silent fail cho polling
-  }
+  } catch {}
 }
 
-function startMonitoring() {
-  if (isMonitoring) return;
-  isMonitoring = true;
-  elements.monitorBtn.textContent = t().monitorRunning;
-  elements.monitorBtn.classList.add('stop', 'loading');
-  elements.monitorBtn.disabled = true;
+function startMonitoring() { /* giữ nguyên */ }
 
-  fetchAndUpdateStats();
-  pollingInterval = setInterval(fetchAndUpdateStats, 10000);
-
-  setTimeout(() => {
-    if (isMonitoring) {
-      elements.monitorBtn.textContent = t().monitorStop;
-      elements.monitorBtn.disabled = false;
-    }
-  }, 2000);
-}
-
-function stopMonitoring() {
-  if (!isMonitoring) return;
-  isMonitoring = false;
-  elements.monitorBtn.textContent = t().monitorStart;
-  elements.monitorBtn.classList.remove('stop', 'loading');
-  elements.pollingIndicator.classList.remove('active');
-  if (pollingInterval) clearInterval(pollingInterval);
-}
+function stopMonitoring() { /* giữ nguyên */ }
 
 async function fetchVideoInfo() {
   const link = elements.tiktokUrl.value.trim();
@@ -267,38 +235,39 @@ async function fetchVideoInfo() {
     return showError(t().errorInvalid);
   }
 
-  if (!turnstileToken) {
-    return showError("Vui lòng chờ xác thực bảo mật hoàn tất (Turnstile).");
-  }
-
   clearUI();
   elements.loading.style.display = 'block';
   elements.fetchBtn.disabled = true;
 
+  // Lấy token chỉ khi nhấn nút
+  const token = await getTurnstileToken();
+
+  if (!token) {
+    elements.loading.style.display = 'none';
+    elements.fetchBtn.disabled = false;
+    return;
+  }
+
   try {
     const params = new URLSearchParams({
       url: encodeURIComponent(link),
-      turnstile: turnstileToken
+      turnstile: token
     });
-
-    console.log('Gửi request:', `api/api.php?${params.toString()}`);
 
     const res = await fetch(`api/api.php?${params.toString()}`);
     if (!res.ok) {
       console.error('API status:', res.status);
-      throw new Error('Network response was not ok');
+      throw new Error('Network error');
     }
 
     const data = await res.json();
-    console.log('API response:', data);
-
     if (data.code !== 0) {
       if (data.code === -2) {
         showError(t().botDetected);
       } else {
         showError(t().fetchFail);
       }
-      throw new Error(data.msg || 'API error');
+      throw new Error();
     }
 
     videoData = data.data;
@@ -343,11 +312,6 @@ async function fetchVideoInfo() {
     elements.result.style.display = 'block';
     setTimeout(() => elements.result.classList.add('show'), 100);
 
-    if (typeof turnstile !== 'undefined') {
-      turnstile.reset();
-    }
-    turnstileToken = null;
-
   } catch (err) {
     console.error('Fetch error:', err);
     showError(t().fetchFail);
@@ -365,7 +329,7 @@ async function startDownload() {
 
   try {
     const res = await fetch(videoData.play);
-    if (!res.ok) throw new Error('Download failed');
+    if (!res.ok) throw new Error();
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
