@@ -1,11 +1,10 @@
 <?php
 // ======================
-// PHẦN NGĂN TRUY CẬP TRỰC TIẾP
+// NGĂN TRUY CẬP TRỰC TIẾP
 // ======================
 $direct_access_detected = false;
 
 if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
-    // Đây là truy cập trực tiếp
     $direct_access_detected = true;
 }
 
@@ -34,13 +33,13 @@ if ($direct_access_detected) {
 }
 
 // ======================
-// PHẦN CODE API BÌNH THƯỜNG
+// CODE API CHÍNH
 // ======================
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
-// Secret key Cloudflare Turnstile (đã cập nhật theo bạn cung cấp)
+// Secret key Cloudflare Turnstile (cập nhật theo bạn gửi mới nhất)
 $turnstile_secret = '0x4AAAAAACfWnlQqmSpuw0vK99b4ctF7kVo';
 
 function respond($data) {
@@ -72,17 +71,14 @@ function verify_turnstile($token) {
     return !empty($response['success']);
 }
 
-// Lấy token Turnstile từ request
 $turnstile_token = $_GET['turnstile'] ?? $_POST['turnstile'] ?? '';
 
-// Verify Turnstile trước khi xử lý bất kỳ logic nào
 if (!verify_turnstile($turnstile_token)) {
     http_response_code(403);
     respond(['code' => -2, 'msg' => 'Turnstile verification failed - possible bot']);
 }
 
-// ────────────────────────────────────────────────
-// Xử lý API tikwm (giữ nguyên phần còn lại)
+// Xử lý API tikwm
 function fetch_with_retry($url, $max_retries = 3, $delay = 3) {
     for ($i = 0; $i < $max_retries; $i++) {
         $ch = curl_init();
