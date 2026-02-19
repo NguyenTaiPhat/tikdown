@@ -21,7 +21,8 @@ const translations = {
     shares: "Chia sẻ",
     videoError: "Không tải được link preview video.",
     downloadError: "Không tìm thấy link tải video không logo!",
-    fetchFail: "Lỗi khi lấy dữ liệu. Thử lại sau vài phút.",
+    fetchFail: "Lỗi khi lấy dữ liệu hoặc phát hiện bot. Vui lòng thử lại.",
+    botDetected: "Phát hiện hành vi bất thường (bot). Vui lòng thử lại sau.",
     langText: "VNI"
   },
   en: {
@@ -45,7 +46,8 @@ const translations = {
     shares: "Shares",
     videoError: "Cannot load video preview link.",
     downloadError: "No watermark-free video link found!",
-    fetchFail: "Error fetching data. Try again in a few minutes.",
+    fetchFail: "Error fetching data or bot detected. Please try again.",
+    botDetected: "Bot behavior detected. Please try again later.",
     langText: "ENG"
   }
 };
@@ -55,6 +57,7 @@ let videoData = null;
 let pollingInterval = null;
 let isMonitoring = false;
 let prevStats = { views: 0, likes: 0, comments: 0, shares: 0 };
+let turnstileToken = null;  // Token từ Cloudflare Turnstile
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
@@ -114,10 +117,39 @@ elements.langToggle.addEventListener('click', () => {
 
 const t = () => translations[currentLang];
 
+// Cloudflare Turnstile callbacks
+function onTurnstileLoad() {
+  if (typeof turnstile === 'undefined') {
+    console.warn('Turnstile script not loaded');
+    return;
+  }
+
+  turnstile.render('#turnstile-container', {
+    sitekey: '0x4AAAAAACfWngoNXQ6N1ta_',
+    theme: 'dark',  // 'light' | 'dark' | 'auto'
+    size: 'normal',
+    callback: function(token) {
+      turnstileToken = token;
+      console.log('Turnstile token ready:', token);
+    },
+    'error-callback': function(code) {
+      console.error('Turnstile error:', code);
+      showError(t().fetchFail);
+      turnstile.reset();
+    },
+    'expired-callback': function() {
+      console.log('Turnstile token expired');
+      turnstile.reset();
+      turnstileToken = null;
+    }
+  });
+}
+
 function showError(msg) {
   elements.errorMessage.textContent = msg;
   elements.error.style.display = 'flex';
   elements.loading.style.display = 'none';
+  elements.fetchBtn.disabled = false;
 }
 
 function clearUI() {
@@ -139,7 +171,7 @@ function clearUI() {
 function adjustAspectRatio(w, h) {
   if (!w || !h) return;
   const r = w / h;
-  elements.mediaContainer.classList.remove('portrait','landscape','square');
+  elements.mediaContainer.classList.remove('portrait', 'landscape', 'square');
   if (r <= 0.85) elements.mediaContainer.classList.add('portrait');
   else if (r >= 1.15) elements.mediaContainer.classList.add('landscape');
   else elements.mediaContainer.classList.add('square');
@@ -147,14 +179,22 @@ function adjustAspectRatio(w, h) {
 
 function showChange(id, nv, pv) {
   const el = document.getElementById(id + 'Change');
-  if (nv > pv)      el.textContent = `+${(nv-pv).toLocaleString()}`, el.className = 'stat-change up';
-  else if (nv < pv) el.textContent = `-${(pv-nv).toLocaleString()}`, el.className = 'stat-change down';
-  else              el.textContent = '', el.className = 'stat-change';
+  if (nv > pv) {
+    el.textContent = `+${(nv - pv).toLocaleString()}`;
+    el.className = 'stat-change up';
+  } else if (nv < pv) {
+    el.textContent = `-${(pv - nv).toLocaleString()}`;
+    el.className = 'stat-change down';
+  } else {
+    el.textContent = '';
+    el.className = 'stat-change';
+  }
 }
 
 function updateStats(data) {
   if (!data?.data) return;
   const info = data.data;
+
   const views    = Number(info.play_count || 0);
   const likes    = Number(info.digg_count || 0);
   const comments = Number(info.comment_count || 0);
@@ -180,13 +220,20 @@ function updateStats(data) {
 async function fetchAndUpdateStats() {
   if (!videoData?.id) return;
   try {
-    const res = await fetch(`api.php?id=${videoData.id}`);
-    if (!res.ok) throw new Error();
+    const res = await fetch(`api/api.php?id=${videoData.id}&turnstile=${encodeURIComponent(turnstileToken || '')}`);
+    if (!res.ok) throw new Error('Network error');
     const data = await res.json();
-    if (data.code !== 0) throw new Error();
+
+    if (data.code !== 0) {
+      if (data.code === -2 || data.msg?.toLowerCase().includes('bot')) {
+        showError(t().botDetected);
+      }
+      throw new Error();
+    }
+
     updateStats(data);
   } catch {
-    // silent fail for polling
+    // silent fail cho polling, không hiển thị lỗi mỗi 10s
   }
 }
 
@@ -194,10 +241,10 @@ function startMonitoring() {
   if (isMonitoring) return;
   isMonitoring = true;
   elements.monitorBtn.textContent = t().monitorRunning;
-  elements.monitorBtn.classList.add('stop','loading');
+  elements.monitorBtn.classList.add('stop', 'loading');
   elements.monitorBtn.disabled = true;
 
-  fetchAndUpdateStats();
+  fetchAndUpdateStats(); // gọi ngay lần đầu
   pollingInterval = setInterval(fetchAndUpdateStats, 10000);
 
   setTimeout(() => {
@@ -212,24 +259,43 @@ function stopMonitoring() {
   if (!isMonitoring) return;
   isMonitoring = false;
   elements.monitorBtn.textContent = t().monitorStart;
-  elements.monitorBtn.classList.remove('stop','loading');
+  elements.monitorBtn.classList.remove('stop', 'loading');
   elements.pollingIndicator.classList.remove('active');
   if (pollingInterval) clearInterval(pollingInterval);
 }
 
 async function fetchVideoInfo() {
   const link = elements.tiktokUrl.value.trim();
-  if (!link || !link.includes('tiktok.com')) return showError(t().errorInvalid);
+  if (!link || !link.includes('tiktok.com')) {
+    return showError(t().errorInvalid);
+  }
+
+  if (!turnstileToken) {
+    return showError("Vui lòng chờ xác thực bảo mật hoàn tất (Turnstile).");
+  }
 
   clearUI();
   elements.loading.style.display = 'block';
   elements.fetchBtn.disabled = true;
 
   try {
-    const res = await fetch(`api.php?url=${encodeURIComponent(link)}`);
-    if (!res.ok) throw new Error();
+    const params = new URLSearchParams({
+      url: encodeURIComponent(link),
+      turnstile: turnstileToken
+    });
+
+    const res = await fetch(`api/api.php?${params.toString()}`);
+    if (!res.ok) throw new Error('Network response was not ok');
+
     const data = await res.json();
-    if (data.code !== 0) throw new Error(data.msg || '');
+    if (data.code !== 0) {
+      if (data.code === -2) {
+        showError(t().botDetected);
+      } else {
+        showError(t().fetchFail);
+      }
+      throw new Error(data.msg || 'API error');
+    }
 
     videoData = data.data;
 
@@ -265,14 +331,22 @@ async function fetchVideoInfo() {
       elements.videoPlayer.load();
       elements.videoPlayer.addEventListener('loadedmetadata', () => {
         adjustAspectRatio(elements.videoPlayer.videoWidth, elements.videoPlayer.videoHeight);
-      }, {once: true});
+      }, { once: true });
     }
 
     videoData.id = videoData.id || link.split('/video/')[1]?.split('?')[0];
 
     elements.result.style.display = 'block';
     setTimeout(() => elements.result.classList.add('show'), 100);
+
+    // Reset Turnstile sau khi dùng thành công
+    if (typeof turnstile !== 'undefined') {
+      turnstile.reset();
+    }
+    turnstileToken = null;
+
   } catch (err) {
+    console.error('Fetch error:', err);
     showError(t().fetchFail);
   } finally {
     elements.loading.style.display = 'none';
@@ -288,7 +362,7 @@ async function startDownload() {
 
   try {
     const res = await fetch(videoData.play);
-    if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error('Download failed');
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -306,7 +380,9 @@ async function startDownload() {
 
 // Events
 elements.fetchBtn.addEventListener('click', fetchVideoInfo);
-elements.tiktokUrl.addEventListener('keypress', e => { if (e.key === 'Enter') fetchVideoInfo(); });
+elements.tiktokUrl.addEventListener('keypress', e => {
+  if (e.key === 'Enter') fetchVideoInfo();
+});
 elements.downloadBtn.addEventListener('click', startDownload);
 elements.monitorBtn.addEventListener('click', () => {
   if (!videoData && !isMonitoring) return showError(t().errorInvalid);
